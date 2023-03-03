@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import convolve as filter2
 import os
+import movement_detector
 
 def get_magnitude(u, v):
     scale = 3
@@ -49,27 +50,21 @@ def draw_quiver(u,v,beforeImg):
     plt.draw()
     plt.show()
 
-def compute_derivatives(img1, img2, channelsToUse=[0, 1, 2]):
+def compute_derivatives(img1, img2):
     x_kernel = np.array([[-1, 1], [-1, 1]]) * 0.25
     y_kernel = np.array([[-1, -1], [1, 1]]) * 0.25
     t_kernel = np.ones((2, 2)) * 0.25
 
-    if len(img1.shape) == 2:
-        fx = filter2(img1,x_kernel) + filter2(img2,x_kernel)
-        fy = filter2(img1, y_kernel) + filter2(img2, y_kernel)
-        ft = filter2(img1, -t_kernel) + filter2(img2, t_kernel)
-        return [fx,fy, ft]
-    else:
-        fx = np.zeros(img1.shape)
-        fy = np.zeros(img1.shape)
-        ft = np.zeros(img1.shape)
-        for channel in channelsToUse:
-            fx[:,:,channel] = filter2(img1[:,:,channel],x_kernel) + filter2(img2[:,:,channel],x_kernel)
-            fy[:,:,channel] = filter2(img1[:,:,channel], y_kernel) + filter2(img2[:,:,channel], y_kernel)
-            ft[:,:,channel] = filter2(img1[:,:,channel], -t_kernel) + filter2(img2[:,:,channel], t_kernel)
-        return [fx,fy, ft]
+    fx = []
+    fy = []
+    ft = []
+    for ch_1, ch_2 in zip(cv2.split(img1), cv2.split(img2)):
+        fx.append(filter2(ch_1, x_kernel) + filter2(ch_2, x_kernel))
+        fy.append(filter2(ch_1, y_kernel) + filter2(ch_2, y_kernel))
+        ft.append(filter2(ch_2, t_kernel) + filter2(ch_1, -t_kernel))
+    return [fx,fy, ft]
 
-def compute_horn_schunck(img1, img2, alpha, delta=10**-1, n_iter=300, channelsToUse=[0, 1, 2]):
+def compute_horn_schunck(img1, img2, alpha, delta=10**-1, n_iter=300):
 
     img1 = img1.astype(float)
     img2 = img2.astype(float)
@@ -79,7 +74,7 @@ def compute_horn_schunck(img1, img2, alpha, delta=10**-1, n_iter=300, channelsTo
 
     u = np.zeros((img1.shape[0], img1.shape[1]))
     v = np.zeros((img1.shape[0], img1.shape[1]))
-    fx, fy, ft = compute_derivatives(img1, img2, channelsToUse)
+    fx, fy, ft = compute_derivatives(img1, img2)
     avg_kernel = np.array([[1 / 12, 1 / 6, 1 / 12],
                             [1 / 6, 0, 1 / 6],
                             [1 / 12, 1 / 6, 1 / 12]], float)
@@ -89,6 +84,10 @@ def compute_horn_schunck(img1, img2, alpha, delta=10**-1, n_iter=300, channelsTo
         v_avg = filter2(v, avg_kernel)
 
         if len(img1.shape) == 2:
+            if iter_counter == 0:
+                fx = fx[0]
+                fy = fy[0]
+                ft = ft[0]
             p = fx * u_avg + fy * v_avg + ft
             d = 4 * alpha**2 + fx**2 + fy**2
             prev = u
@@ -98,20 +97,20 @@ def compute_horn_schunck(img1, img2, alpha, delta=10**-1, n_iter=300, channelsTo
         else:
             u_arr = [0, 0, 0]
             v_arr = [0, 0, 0]
-            for i in channelsToUse:
-                p = fx[:,:,i] * u_avg + fy[:,:,i] * v_avg + ft[:,:,i]
-                d = 4 * alpha**2 + fx[:,:,i]**2 + fy[:,:,i]**2
+            for i in range(len(fx)):
+                p = fx[i] * u_avg + fy[i] * v_avg + ft[i]
+                d = 4 * alpha**2 + fx[i]**2 + fy[i]**2
                 prev = u
 
-                u_arr[i] = (u_avg - fx[:,:,i] * (p / d))
-                v_arr[i] = (v_avg - fy[:,:,i] * (p / d))
+                u_arr[i] = (u_avg - fx[i] * (p / d))
+                v_arr[i] = (v_avg - fy[i] * (p / d))
             u_sum = np.zeros((img1.shape[0], img1.shape[1]))
             v_sum = np.zeros((img1.shape[0], img1.shape[1]))
-            for i in channelsToUse:
+            for i in range(img1.shape[2]):
                 u_sum += u_arr[i]
                 v_sum += v_arr[i]
-            u = u_sum / len(channelsToUse)
-            v = v_sum / len(channelsToUse)
+            u = u_sum / img1.shape[2]
+            v = v_sum / img1.shape[2]
 
         diff = np.linalg.norm(u - prev, 2)
         if  diff < delta or iter_counter > n_iter:
@@ -139,8 +138,8 @@ def create_entry_frames(video_name):
 if __name__ == "__main__":
     create_entry_frames("assets/videos/videox5.mp4")
 
-    img2 = cv2.imread("entry_frames/frame184.jpg")
-    img1 = cv2.imread("entry_frames/frame185.jpg")
+    img2 = cv2.imread("./entry_frames/frame184.jpg")
+    img1 = cv2.imread("./entry_frames/frame185.jpg")
     if img1 is None or img2 is None:
         raise Exception("Could not read the images.")
     
@@ -148,20 +147,30 @@ if __name__ == "__main__":
     img2 = cv2.resize(img2, (0,0), fx=1, fy=1)
     # img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
     # img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
-    # img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2HSV)
-    # img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2HSV)
+    img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2HSV)
+    img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2HSV)
+    img1_copy = img1.copy()
+    img2_copy = img2.copy()
+    channels_1 = cv2.split(img1)
+    channels_2 = cv2.split(img2)
+    img1 = (channels_1[2])
+    img2 = (channels_2[2])
+    # img1 = cv2.merge(channels_1[:])
+    # img2 = cv2.merge(channels_2[:])
     # cv2.imshow("img1", img1)
     # cv2.imshow("img2", img2)
     # cv2.waitKey(0)
-    img1_copy = img1.copy()
-    img2_copy = img2.copy()
 
 
-    u,v = compute_horn_schunck(img1, img2, alpha = 15, delta = 10**-1, n_iter = 900, channelsToUse = [0, 1, 2])
+    u,v = compute_horn_schunck(img1, img2, alpha = 15, delta = 10**-1, n_iter = 900)
 
-    # img = cv2.cvtColor(img1_copy, cv2.COLOR_GRAY2BGR)
-    img = img1_copy
+    img = cv2.cvtColor(img1_copy, cv2.COLOR_HSV2BGR)
+    # img = img1_copy
 
     draw_quiver(u, v, img)
+
+    img = movement_detector.segment_movement(img, u, v, 0.6)
+
+    cv2.imshow("img", img)
 
     cv2.waitKey(0)
