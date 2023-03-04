@@ -147,16 +147,16 @@ if __name__ == "__main__":
     img2 = cv2.resize(img2, (0,0), fx=1, fy=1)
     # img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
     # img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
-    img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2HSV)
-    img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2HSV)
+    # img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2HSV)
+    # img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2HSV)
     img1_copy = img1.copy()
     img2_copy = img2.copy()
     channels_1 = cv2.split(img1)
     channels_2 = cv2.split(img2)
-    img1 = (channels_1[2])
-    img2 = (channels_2[2])
-    # img1 = cv2.merge(channels_1[:])
-    # img2 = cv2.merge(channels_2[:])
+    # img1 = (channels_1[2])
+    # img2 = (channels_2[2])
+    img1 = cv2.merge(channels_1[1:])
+    img2 = cv2.merge(channels_2[1:])
     # cv2.imshow("img1", img1)
     # cv2.imshow("img2", img2)
     # cv2.waitKey(0)
@@ -164,12 +164,12 @@ if __name__ == "__main__":
 
     u,v = compute_horn_schunck(img1, img2, alpha = 15, delta = 10**-1, n_iter = 900)
 
-    img = cv2.cvtColor(img1_copy, cv2.COLOR_HSV2BGR)
-    # img = img1_copy
+    # img = cv2.cvtColor(img1_copy, cv2.COLOR_HSV2BGR)
+    img = img1_copy
 
     draw_quiver(u, v, img)
 
-    img = movement_detector.segment_movement(img, u, v, 0.6)
+    img = movement_detector.mark_movement(img, u, v, 0.1)
 
     cv2.imshow("img", img)
 
